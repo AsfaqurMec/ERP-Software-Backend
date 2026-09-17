@@ -1,0 +1,332 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+
+enum Role {
+ SUPER_ADMIN
+ ADMIN
+ MANAGER
+ SALES
+ PURCHASE
+ ACCOUNTANT
+}
+enum RecordStatus {
+ ACTIVE
+ INACTIVE
+}
+enum DocumentStatus {
+ DRAFT
+ CONFIRMED
+ CANCELLED
+}
+enum PaymentStatus {
+ UNPAID
+ PARTIAL
+ PAID
+}
+enum PaymentMethod {
+ CASH
+ BANK
+ BKASH
+ NAGAD
+ CARD
+ OTHER
+}
+enum MovementType {
+ PURCHASE
+ SALE
+ PURCHASE_RETURN
+ SALES_RETURN
+ ADJUSTMENT_IN
+ ADJUSTMENT_OUT
+ OPENING_STOCK
+}
+enum PartyType {
+ CUSTOMER
+ SUPPLIER
+}
+
+model User {
+ id String @id @default(cuid())
+ name String
+ email String @unique
+ phone String?
+ avatar String?
+ passwordHash String
+ role Role @default(ADMIN)
+ roleId String?
+ customRole RoleDefinition? @relation(fields: [roleId], references: [id])
+ status RecordStatus @default(ACTIVE)
+ lastLoginAt DateTime?
+ activityLogs ActivityLog[]
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+model Category {
+ id String @id @default(cuid())
+ name String @unique
+ description String?
+ image String?
+ status RecordStatus @default(ACTIVE)
+ products Product[]
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+model Supplier {
+ id String @id @default(cuid())
+ name String
+ company String?
+ phone String?
+ email String?
+ address String?
+ openingBalance Decimal @default(0) @db.Decimal(14,2)
+ balance Decimal @default(0) @db.Decimal(14,2)
+ notes String?
+ status RecordStatus @default(ACTIVE)
+ purchases Purchase[]
+ products Product[]
+ payments Payment[]
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+model Customer {
+ id String @id @default(cuid())
+ name String
+ phone String?
+ email String?
+ address String?
+ openingBalance Decimal @default(0) @db.Decimal(14,2)
+ balance Decimal @default(0) @db.Decimal(14,2)
+ notes String?
+ status RecordStatus @default(ACTIVE)
+ sales Sale[]
+ payments Payment[]
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+model Product {
+ id String @id @default(cuid())
+ sku String @unique
+ barcode String? @unique
+ name String
+ categoryId String
+ category Category @relation(fields:[categoryId],references:[id])
+ supplierId String?
+ supplier Supplier? @relation(fields:[supplierId],references:[id])
+ brand String?
+ description String?
+ image String?
+ unit String @default("pcs")
+ purchasePrice Decimal @db.Decimal(14,2)
+ sellingPrice Decimal @db.Decimal(14,2)
+ wholesalePrice Decimal? @db.Decimal(14,2)
+ stock Decimal @default(0) @db.Decimal(14,3)
+ averageCost Decimal @default(0) @db.Decimal(14,4)
+ minimumStock Decimal @default(0) @db.Decimal(14,3)
+ maximumStock Decimal? @db.Decimal(14,3)
+ status RecordStatus @default(ACTIVE)
+ movements StockMovement[]
+ purchaseItems PurchaseItem[]
+ saleItems SaleItem[]
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+model Purchase {
+ id String @id @default(cuid())
+ purchaseNumber String @unique
+ supplierId String
+ supplier Supplier @relation(fields:[supplierId],references:[id])
+ invoiceNumber String?
+ purchaseDate DateTime
+ status DocumentStatus @default(DRAFT)
+ paymentStatus PaymentStatus @default(UNPAID)
+ subtotal Decimal @db.Decimal(14,2)
+ discount Decimal @default(0) @db.Decimal(14,2)
+ tax Decimal @default(0) @db.Decimal(14,2)
+ shipping Decimal @default(0) @db.Decimal(14,2)
+ grandTotal Decimal @db.Decimal(14,2)
+ paidAmount Decimal @default(0) @db.Decimal(14,2)
+ dueAmount Decimal @db.Decimal(14,2)
+ paymentMethod PaymentMethod?
+ notes String?
+ items PurchaseItem[]
+ payments Payment[]
+ returns PurchaseReturn[]
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+model PurchaseItem {
+ id String @id @default(cuid())
+ purchaseId String
+ purchase Purchase @relation(fields:[purchaseId],references:[id],onDelete:Cascade)
+ productId String
+ product Product @relation(fields:[productId],references:[id])
+ quantity Decimal @db.Decimal(14,3)
+ unitCost Decimal @db.Decimal(14,2)
+ discount Decimal @default(0) @db.Decimal(14,2)
+ tax Decimal @default(0) @db.Decimal(14,2)
+ subtotal Decimal @db.Decimal(14,2)
+ total Decimal @db.Decimal(14,2)
+}
+model Sale {
+ id String @id @default(cuid())
+ invoiceNumber String @unique
+ customerId String?
+ customer Customer? @relation(fields:[customerId],references:[id])
+ saleDate DateTime
+ status DocumentStatus @default(DRAFT)
+ paymentStatus PaymentStatus @default(UNPAID)
+ subtotal Decimal @db.Decimal(14,2)
+ discount Decimal @default(0) @db.Decimal(14,2)
+ tax Decimal @default(0) @db.Decimal(14,2)
+ shipping Decimal @default(0) @db.Decimal(14,2)
+ grandTotal Decimal @db.Decimal(14,2)
+ paidAmount Decimal @default(0) @db.Decimal(14,2)
+ dueAmount Decimal @db.Decimal(14,2)
+ cogs Decimal @default(0) @db.Decimal(14,2)
+ paymentMethod PaymentMethod?
+ notes String?
+ items SaleItem[]
+ payments Payment[]
+ returns SalesReturn[]
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+model SaleItem {
+ id String @id @default(cuid())
+ saleId String
+ sale Sale @relation(fields:[saleId],references:[id],onDelete:Cascade)
+ productId String
+ product Product @relation(fields:[productId],references:[id])
+ quantity Decimal @db.Decimal(14,3)
+ unitPrice Decimal @db.Decimal(14,2)
+ unitCost Decimal @db.Decimal(14,4)
+ discount Decimal @default(0) @db.Decimal(14,2)
+ tax Decimal @default(0) @db.Decimal(14,2)
+ subtotal Decimal @db.Decimal(14,2)
+ total Decimal @db.Decimal(14,2)
+}
+model StockMovement {
+ id String @id @default(cuid())
+ productId String
+ product Product @relation(fields:[productId],references:[id])
+ type MovementType
+ quantity Decimal @db.Decimal(14,3)
+ unitCost Decimal? @db.Decimal(14,4)
+ referenceType String?
+ referenceId String?
+ reason String?
+ note String?
+ movementDate DateTime @default(now())
+ createdAt DateTime @default(now())
+ @@index([productId,movementDate])
+}
+model Payment {
+ id String @id @default(cuid())
+ partyType PartyType
+ partyId String
+ customerId String?
+ customer Customer? @relation(fields:[customerId],references:[id])
+ supplierId String?
+ supplier Supplier? @relation(fields:[supplierId],references:[id])
+ saleId String?
+ sale Sale? @relation(fields:[saleId],references:[id])
+ purchaseId String?
+ purchase Purchase? @relation(fields:[purchaseId],references:[id])
+ amount Decimal @db.Decimal(14,2)
+ date DateTime
+ method PaymentMethod
+ reference String?
+ note String?
+ createdAt DateTime @default(now())
+}
+model Expense {
+ id String @id @default(cuid())
+ category String
+ amount Decimal @db.Decimal(14,2)
+ date DateTime
+ paymentMethod PaymentMethod
+ description String?
+ note String?
+ createdAt DateTime @default(now())
+}
+model SalesReturn {
+ id String @id @default(cuid())
+ saleId String
+ sale Sale @relation(fields:[saleId],references:[id])
+ date DateTime
+ reason String
+ note String?
+ total Decimal @db.Decimal(14,2)
+ cogs Decimal @db.Decimal(14,2)
+ items SalesReturnItem[]
+ createdAt DateTime @default(now())
+}
+model SalesReturnItem {
+ id String @id @default(cuid())
+ salesReturnId String
+ salesReturn SalesReturn @relation(fields:[salesReturnId],references:[id],onDelete:Cascade)
+ saleItemId String
+ productId String
+ quantity Decimal @db.Decimal(14,3)
+ total Decimal @db.Decimal(14,2)
+ @@index([saleItemId])
+}
+model PurchaseReturn {
+ id String @id @default(cuid())
+ purchaseId String
+ purchase Purchase @relation(fields:[purchaseId],references:[id])
+ date DateTime
+ reason String
+ note String?
+ total Decimal @db.Decimal(14,2)
+ items PurchaseReturnItem[]
+ createdAt DateTime @default(now())
+}
+model PurchaseReturnItem {
+ id String @id @default(cuid())
+ purchaseReturnId String
+ purchaseReturn PurchaseReturn @relation(fields:[purchaseReturnId],references:[id],onDelete:Cascade)
+ purchaseItemId String
+ productId String
+ quantity Decimal @db.Decimal(14,3)
+ total Decimal @db.Decimal(14,2)
+ @@index([purchaseItemId])
+}
+
+model ActivityLog {
+ id String @id @default(cuid())
+ userId String?
+ user User? @relation(fields:[userId],references:[id])
+ action String
+ module String
+ reference String?
+ details Json?
+ ip String?
+ createdAt DateTime @default(now())
+ @@index([module,createdAt])
+ @@index([userId])
+}
+
+model SystemSetting {
+ key String @id
+ value String
+ category String @default("GENERAL")
+ updatedAt DateTime @updatedAt
+}
+
+model RoleDefinition {
+ id String @id @default(cuid())
+ name String @unique
+ description String?
+ permissions Json
+ isSystem Boolean @default(false)
+ users User[]
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
