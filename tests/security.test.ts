@@ -57,4 +57,52 @@ describe('Security Suite', () => {
       expect(isBase64DataUrl('random_text_string')).toBe(false);
     });
   });
+
+  describe('Guest Mode Policy & Permissions', () => {
+    it('should embed isGuest claim in JWT token for guest user', async () => {
+      const mockGuest = {
+        id: 'guest_user_1',
+        role: 'SUPER_ADMIN',
+        isGuest: true,
+      };
+
+      const token = await createToken(mockGuest);
+      const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'development-secret-change-me-min-32-chars-long!');
+      const { payload } = await jwtVerify(token, secret);
+
+      expect(payload.sub).toBe('guest_user_1');
+      expect(payload.role).toBe('SUPER_ADMIN');
+      expect(payload.isGuest).toBe(true);
+    });
+
+    it('should grant only view/read permissions to guest account', async () => {
+      const { resolveUserPermissions, hasUserPermission } = await import('../src/modules/auth/permissions.js');
+      const guestUser = { role: 'SUPER_ADMIN' as any, isGuest: true };
+
+      const permissions = resolveUserPermissions(guestUser);
+      expect(permissions).not.toContain('*');
+      expect(permissions).toContain('products.read');
+      expect(permissions).toContain('sales.read');
+      expect(permissions).toContain('purchases.read');
+      expect(permissions).toContain('inventory.read');
+      expect(permissions).toContain('reports.read');
+      expect(permissions).toContain('analytics.read');
+      expect(permissions).toContain('users.read');
+      expect(permissions).toContain('roles.read');
+
+      // Verify write permissions are denied
+      expect(permissions).not.toContain('products.create');
+      expect(permissions).not.toContain('products.delete');
+      expect(permissions).not.toContain('sales.create');
+      expect(permissions).not.toContain('users.delete');
+
+      // Verify hasUserPermission check
+      expect(hasUserPermission(guestUser, 'products.read')).toBe(true);
+      expect(hasUserPermission(guestUser, 'analytics.read')).toBe(true);
+      expect(hasUserPermission(guestUser, 'products.create')).toBe(false);
+      expect(hasUserPermission(guestUser, 'sales.create')).toBe(false);
+      expect(hasUserPermission(guestUser, 'users.manage' as any)).toBe(false);
+      expect(hasUserPermission(guestUser, 'inventory.adjust')).toBe(false);
+    });
+  });
 });

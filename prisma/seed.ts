@@ -58,6 +58,15 @@ async function main() {
     }),
     prisma.user.create({
       data: {
+        name: 'Guest Super Admin',
+        email: 'guest@stockpilot.io',
+        passwordHash,
+        role: Role.SUPER_ADMIN,
+        status: RecordStatus.ACTIVE,
+      },
+    }),
+    prisma.user.create({
+      data: {
         name: 'System Admin',
         email: 'admin@stockpilot.io',
         passwordHash,

@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { prisma, Role, RecordStatus } from '../../lib/prisma.js';
 import { AppError } from '../../lib/errors.js';
 import { resolveUserPermissions } from '../auth/permissions.js';
-import { validatePasswordStrength } from '../auth/auth.js';
+import { validatePasswordStrength, GUEST_EMAIL } from '../auth/auth.js';
 import { recordActivity } from '../audit/audit.service.js';
 import { ensureImageUrl } from '../upload/upload.service.js';
 
@@ -218,6 +218,10 @@ export async function updateUser(
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) throw new AppError(404, 'User not found', 'NOT_FOUND');
 
+  if (user.email === GUEST_EMAIL) {
+    throw new AppError(400, 'The Guest account is a protected system account and cannot be modified.', 'GUEST_ACCOUNT_PROTECTED');
+  }
+
   const updateData: any = {};
 
   if (data.name) updateData.name = data.name.trim();
@@ -284,6 +288,10 @@ export async function updateUserStatus(id: string, status: RecordStatus, current
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) throw new AppError(404, 'User not found', 'NOT_FOUND');
 
+  if (user.email === GUEST_EMAIL) {
+    throw new AppError(400, 'The Guest account is a protected system account and cannot be deactivated.', 'GUEST_ACCOUNT_PROTECTED');
+  }
+
   // Prevent deactivating the last active SUPER_ADMIN
   if (user.role === Role.SUPER_ADMIN && status === RecordStatus.INACTIVE) {
     const activeAdmins = await prisma.user.count({
@@ -319,6 +327,10 @@ export async function updateUserRole(
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) throw new AppError(404, 'User not found', 'NOT_FOUND');
 
+  if (user.email === GUEST_EMAIL) {
+    throw new AppError(400, 'The Guest account is a protected system account and its role cannot be changed.', 'GUEST_ACCOUNT_PROTECTED');
+  }
+
   // Prevent removing own SUPER_ADMIN role
   if (id === currentUserId && user.role === Role.SUPER_ADMIN && rolePayload.role !== Role.SUPER_ADMIN && !rolePayload.roleId) {
     const activeAdmins = await prisma.user.count({
@@ -349,6 +361,10 @@ export async function deleteUser(id: string, currentUserId: string) {
 
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) throw new AppError(404, 'User not found', 'NOT_FOUND');
+
+  if (user.email === GUEST_EMAIL) {
+    throw new AppError(400, 'The Guest account is a protected system account and cannot be deleted.', 'GUEST_ACCOUNT_PROTECTED');
+  }
 
   if (user.role === Role.SUPER_ADMIN) {
     const activeAdmins = await prisma.user.count({

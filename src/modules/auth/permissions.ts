@@ -270,7 +270,26 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[] | '*'> = {
   ],
 };
 
-export function resolveUserPermissions(user: { role: Role; customRole?: { permissions: any } | null }): string[] {
+export const GUEST_READ_PERMISSIONS: Permission[] = [
+  'products.read',
+  'inventory.read',
+  'sales.read',
+  'purchases.read',
+  'customers.read',
+  'suppliers.read',
+  'payments.read',
+  'expenses.read',
+  'analytics.read',
+  'reports.read',
+  'users.read',
+  'roles.read',
+];
+
+export function resolveUserPermissions(user: { role: Role; customRole?: { permissions: any } | null; isGuest?: boolean }): string[] {
+  if (user.isGuest) {
+    return [...GUEST_READ_PERMISSIONS];
+  }
+
   if (user.role === 'SUPER_ADMIN') {
     return ['*'];
   }
@@ -284,7 +303,11 @@ export function resolveUserPermissions(user: { role: Role; customRole?: { permis
   return def || [];
 }
 
-export function hasUserPermission(user: { role: Role; customRole?: { permissions: any } | null }, permission: Permission): boolean {
+export function hasUserPermission(user: { role: Role; customRole?: { permissions: any } | null; isGuest?: boolean }, permission: Permission): boolean {
+  if (user.isGuest) {
+    return GUEST_READ_PERMISSIONS.includes(permission);
+  }
+
   if (user.role === 'SUPER_ADMIN') return true;
 
   if (user.customRole?.permissions && Array.isArray(user.customRole.permissions)) {

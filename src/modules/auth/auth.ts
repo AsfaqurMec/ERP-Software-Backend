@@ -12,7 +12,10 @@ export {
   type Permission,
   ALL_PERMISSIONS,
   DEFAULT_ROLE_PERMISSIONS,
+  GUEST_READ_PERMISSIONS,
 } from './permissions.js';
+
+export const GUEST_EMAIL = 'guest@stockpilot.io';
 
 const jwtSecretEnv = process.env.JWT_SECRET;
 if (!jwtSecretEnv || jwtSecretEnv.length < 32 || jwtSecretEnv === 'development-secret-change-me') {
@@ -37,9 +40,10 @@ function getPasswordSignature(passwordHash: string): string {
   return passwordHash ? passwordHash.slice(-10) : '';
 }
 
-export async function createToken(user: { id: string; role: string; passwordHash?: string }) {
+export async function createToken(user: { id: string; role: string; passwordHash?: string; isGuest?: boolean }) {
   const pwdSig = user.passwordHash ? getPasswordSignature(user.passwordHash) : undefined;
-  return new SignJWT({ role: user.role, pwdSig })
+  const isGuest = Boolean(user.isGuest);
+  return new SignJWT({ role: user.role, isGuest, pwdSig })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(user.id)
     .setIssuedAt()
@@ -77,7 +81,17 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       throw new AppError(401, 'Session invalidated due to password change. Please log in again.', 'UNAUTHORIZED');
     }
 
-    (req as any).user = user;
+    const isGuest = Boolean(payload.isGuest || user.email === GUEST_EMAIL);
+    (req as any).user = {
+      ...user,
+      isGuest,
+    };
+
+    // Guest mode is strictly view-only: reject any non-idempotent or mutating HTTP methods
+    if (isGuest && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      throw new AppError(403, 'Guest mode is view-only. You cannot create, edit, or delete records.', 'GUEST_VIEW_ONLY');
+    }
+
     next();
   } catch (e) {
     next(e);
@@ -114,10 +128,11 @@ export async function login(email: string, password: string) {
     data: { lastLoginAt: new Date() },
   });
 
-  const permissions = resolveUserPermissions(user);
+  const isGuest = user.email === GUEST_EMAIL;
+  const permissions = resolveUserPermissions({ ...user, isGuest });
 
   return {
-    token: await createToken(user),
+    token: await createToken({ ...user, isGuest }),
     user: {
       id: user.id,
       name: user.name,
@@ -128,13 +143,79 @@ export async function login(email: string, password: string) {
       roleId: user.roleId,
       customRole: user.customRole ? { id: user.customRole.id, name: user.customRole.name } : null,
       permissions,
+      isGuest,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
     },
   };
 }
 
-export async function getCurrentUser(userId: string) {
+export async function loginAsGuest() {
+  let user = await prisma.user.findUnique({
+    where: { email: GUEST_EMAIL },
+    include: { customRole: true },
+  });
+
+  if (!user) {
+    const dummyPasswordHash = await bcrypt.hash('GuestSuperAdmin@2026!', 10);
+    user = await prisma.user.create({
+      data: {
+        name: 'Guest Super Admin',
+        email: GUEST_EMAIL,
+        passwordHash: dummyPasswordHash,
+        role: Role.SUPER_ADMIN,
+        status: 'ACTIVE',
+      },
+      include: { customRole: true },
+    });
+  } else if (user.status !== 'ACTIVE' || user.role !== Role.SUPER_ADMIN) {
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        status: 'ACTIVE',
+        role: Role.SUPER_ADMIN,
+      },
+      include: { customRole: true },
+    });
+  }
+
+  // Update last login timestamp safely
+  try {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+  } catch {}
+
+  const permissions = resolveUserPermissions({ ...user, isGuest: true });
+
+  const token = await createToken({
+    id: user.id,
+    role: user.role,
+    passwordHash: user.passwordHash,
+    isGuest: true,
+  });
+
+  return {
+    token,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      avatar: user.avatar,
+      role: user.role,
+      roleId: user.roleId,
+      customRole: user.customRole ? { id: user.customRole.id, name: user.customRole.name } : null,
+      permissions,
+      isGuest: true,
+      lastLoginAt: user.lastLoginAt,
+      createdAt: user.createdAt,
+    },
+  };
+}
+
+export async function getCurrentUser(userId: string, isGuestToken = false) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: { customRole: true },
@@ -144,7 +225,8 @@ export async function getCurrentUser(userId: string) {
     throw new AppError(401, 'User session not found or inactive', 'UNAUTHORIZED');
   }
 
-  const permissions = resolveUserPermissions(user);
+  const isGuest = Boolean(isGuestToken || user.email === GUEST_EMAIL);
+  const permissions = resolveUserPermissions({ ...user, isGuest });
 
   return {
     id: user.id,
@@ -156,6 +238,7 @@ export async function getCurrentUser(userId: string) {
     roleId: user.roleId,
     customRole: user.customRole ? { id: user.customRole.id, name: user.customRole.name } : null,
     permissions,
+    isGuest,
     status: user.status,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,

@@ -2,7 +2,7 @@ import express, { Router } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { asyncRoute, sendSuccess } from './lib/http.js';
-import { login, authenticate, getCurrentUser, changeUserPassword } from './modules/auth/auth.js';
+import { login, loginAsGuest, authenticate, getCurrentUser, changeUserPassword } from './modules/auth/auth.js';
 
 import categoryRoutes from './modules/categories/category.routes.js';
 import productRoutes from './modules/products/product.routes.js';
@@ -56,6 +56,15 @@ router.post(
 );
 
 router.post(
+  '/auth/guest',
+  authLimiter,
+  asyncRoute(async (_req, res) => {
+    const result = await loginAsGuest();
+    sendSuccess(res, result, 'Logged in as Guest Super Admin');
+  })
+);
+
+router.post(
   '/auth/logout',
   asyncRoute(async (_req, res) => {
     sendSuccess(res, { loggedOut: true }, 'Logged out successfully');
@@ -71,7 +80,7 @@ router.use(authenticate);
 router.get(
   '/auth/me',
   asyncRoute(async (req, res) => {
-    const user = await getCurrentUser((req as any).user.id);
+    const user = await getCurrentUser((req as any).user.id, (req as any).user.isGuest);
     sendSuccess(res, user, 'Current session user');
   })
 );
