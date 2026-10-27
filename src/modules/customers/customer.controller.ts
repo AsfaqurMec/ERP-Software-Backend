@@ -14,6 +14,11 @@ export async function getCustomer(req: Request, res: Response) {
   sendSuccess(res, customer, 'Customer profile retrieved');
 }
 
+export async function getCustomerRisk(req: Request, res: Response) {
+  const risk = await customerService.getCustomerCreditRisk(String(req.params.id));
+  sendSuccess(res, risk, 'Customer credit risk evaluated successfully');
+}
+
 export async function createCustomer(req: Request, res: Response) {
   const input = createCustomerSchema.parse(req.body);
   const customer = await customerService.createCustomer(input);

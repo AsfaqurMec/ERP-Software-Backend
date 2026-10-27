@@ -5,6 +5,8 @@ import * as controller from './controller.js';
 
 const router = Router();
 
+router.get('/intelligence/briefing', requirePermission('analytics.read'), asyncRoute(controller.getMorningBriefing));
+router.post('/intelligence/actions/execute', requirePermission('analytics.read'), asyncRoute(controller.executeAction));
 router.get('/intelligence', requirePermission('analytics.read'), asyncRoute(controller.getOwnerIntelligence));
 router.get('/dashboard', requirePermission('analytics.read'), asyncRoute(controller.getDashboard));
 router.get('/deep', requirePermission('analytics.read'), asyncRoute(controller.getDeepAnalytics));

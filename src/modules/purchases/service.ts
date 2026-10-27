@@ -130,6 +130,30 @@ export async function createPurchase(input: CreatePurchaseInput) {
   const isConfirmed = input.status === 'CONFIRMED';
   const purchaseDate = new Date(input.purchaseDate);
 
+  // Anomaly Guard: Protect against fat-finger typos & extreme cost spikes
+  if (!input.allowCostOverride) {
+    for (const item of calculatedItems) {
+      const product = await prisma.product.findUnique({ where: { id: item.productId } });
+      if (product) {
+        const baseCost =
+          product.averageCost.toNumber() > 0 ? product.averageCost.toNumber() : product.purchasePrice.toNumber();
+        if (baseCost > 0) {
+          const costVal = item.unitCost.toNumber();
+          if (costVal > baseCost * 4) {
+            throw new BusinessError(
+              `Cost spike anomaly detected for "${product.name}": Input cost is ৳${costVal.toLocaleString()}, which is >400% higher than historical cost (৳${baseCost.toLocaleString()}). Check for typing errors or toggle cost override to confirm.`
+            );
+          }
+          if (costVal < baseCost * 0.15 && costVal > 0) {
+            throw new BusinessError(
+              `Abnormally low cost detected for "${product.name}": Input cost is ৳${costVal.toLocaleString()}, which is <15% of historical cost (৳${baseCost.toLocaleString()}). Check for typing errors or toggle cost override to confirm.`
+            );
+          }
+        }
+      }
+    }
+  }
+
   return prisma.$transaction(async (db: any) => {
     const count = await db.purchase.count();
     const purchaseNumber = `PUR-${String(count + 1).padStart(6, '0')}`;

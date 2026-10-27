@@ -4,6 +4,7 @@ import { BusinessError, NotFoundError } from '../../lib/errors.js';
 import { adjustStock } from '../inventory/service.js';
 import { buildPaginatedResult, type PaginatedResult } from '../../lib/pagination.js';
 import type { CreateSaleInput, SaleQueryInput, SalesReturnInput } from './dto.js';
+import { evaluateCustomerCreditRisk } from '../customers/credit-risk.service.js';
 
 function computePaymentStatus(grandTotal: Prisma.Decimal, paidAmount: Prisma.Decimal): PaymentStatus {
   if (paidAmount.greaterThanOrEqualTo(grandTotal)) return PaymentStatus.PAID;
@@ -136,6 +137,29 @@ export async function createSale(input: CreateSaleInput) {
   const dueAmount = grandTotal.sub(paidAmount);
   const isConfirmed = input.status === 'CONFIRMED';
   const saleDate = new Date(input.saleDate);
+
+  if (dueAmount.greaterThan(0)) {
+    if (!customerId) {
+      throw new BusinessError(
+        'Credit sales require a registered customer. Anonymous sales must be paid in full (due amount must be 0).'
+      );
+    }
+
+    if (isConfirmed && !input.allowCreditOverride) {
+      const creditProfile = await evaluateCustomerCreditRisk(customerId);
+      if (creditProfile.riskCategory === 'HIGH_RISK') {
+        throw new BusinessError(
+          `Credit sale blocked: Customer "${creditProfile.customerName}" is flagged as HIGH RISK (${creditProfile.riskFactors[0] || 'unpaid overdue balance'}). Strict Cash-on-Delivery (COD) required.`
+        );
+      }
+      const newTotalDebt = creditProfile.balance + dueAmount.toNumber();
+      if (creditProfile.recommendedCreditLimit > 0 && newTotalDebt > creditProfile.recommendedCreditLimit) {
+        throw new BusinessError(
+          `Credit limit exceeded: Safe credit limit for "${creditProfile.customerName}" is ৳${creditProfile.recommendedCreditLimit.toLocaleString()}. With this invoice (due: ৳${dueAmount.toNumber().toLocaleString()}), total debt would reach ৳${newTotalDebt.toLocaleString()}.`
+        );
+      }
+    }
+  }
 
   return prisma.$transaction(async (db: any) => {
     let totalCogs = new Prisma.Decimal(0);

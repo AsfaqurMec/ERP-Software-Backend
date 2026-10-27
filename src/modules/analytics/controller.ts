@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { sendSuccess } from '../../lib/http.js';
 import * as analyticsService from './service.js';
 import { getOwnerIntelligence as getIntelligenceService } from './service-intelligence.js';
+import { getMorningActionBriefing, executeActionCard } from './action-center.service.js';
 
 export async function getDashboard(req: Request, res: Response) {
   const timeframe = req.query.timeframe as string | undefined;
@@ -33,5 +34,16 @@ export async function getOwnerIntelligence(req: Request, res: Response) {
 
   const data = await getIntelligenceService(timeframe, customFrom, customTo);
   sendSuccess(res, data, 'Owner intelligence retrieved successfully');
+}
+
+export async function getMorningBriefing(req: Request, res: Response) {
+  const briefing = await getMorningActionBriefing();
+  sendSuccess(res, briefing, 'Morning action briefing retrieved successfully');
+}
+
+export async function executeAction(req: Request, res: Response) {
+  const { actionType, payload } = req.body;
+  const result = await executeActionCard(actionType, payload);
+  sendSuccess(res, result, result.message);
 }
 

@@ -22,6 +22,7 @@ export const createPurchaseSchema = z.object({
   paymentMethod: z.nativeEnum(PaymentMethod).optional(),
   notes: z.string().optional(),
   status: z.enum(['DRAFT', 'CONFIRMED']).default('CONFIRMED'),
+  allowCostOverride: z.boolean().optional(),
 });
 
 export const purchaseReturnSchema = z.object({

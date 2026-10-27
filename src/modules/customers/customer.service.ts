@@ -3,10 +3,25 @@ import { NotFoundError } from '../../lib/errors.js';
 import { buildPaginatedResult, type PaginatedResult } from '../../lib/pagination.js';
 import * as customerRepo from './customer.repository.js';
 import type { CreateCustomerInput, CustomerQueryInput, UpdateCustomerInput } from './customer.validation.js';
+import { evaluateCustomerCreditRisk } from './credit-risk.service.js';
 
 export async function getCustomers(query: CustomerQueryInput): Promise<PaginatedResult<any>> {
   const result = await customerRepo.findManyPaginated(query);
-  return buildPaginatedResult(result.data, result.total, result.page, result.limit);
+  const enhanced = result.data.map((c: any) => {
+    const bal = Number(c.balance || 0);
+    let riskLevel = 'LOW';
+    if (bal > 40000) riskLevel = 'HIGH';
+    else if (bal > 10000) riskLevel = 'MEDIUM';
+    return {
+      ...c,
+      riskLevel,
+    };
+  });
+  return buildPaginatedResult(enhanced, result.total, result.page, result.limit);
+}
+
+export async function getCustomerCreditRisk(id: string) {
+  return evaluateCustomerCreditRisk(id);
 }
 
 export async function getCustomerById(id: string) {
@@ -30,8 +45,11 @@ export async function getCustomerById(id: string) {
     }
   }
 
+  const creditRisk = await evaluateCustomerCreditRisk(id).catch(() => null);
+
   return {
     ...customer,
+    creditRisk,
     summary: {
       totalSales,
       totalPaid,

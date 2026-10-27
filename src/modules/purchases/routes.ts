@@ -12,6 +12,7 @@ router.post('/returns', requirePermission('purchases.return'), asyncRoute(contro
 
 // Standard purchase endpoints
 router.get('/', requirePermission('purchases.read'), asyncRoute(controller.listPurchases));
+router.post('/scan-invoice', requirePermission('purchases.create'), asyncRoute(controller.scanInvoice));
 router.get('/:id', requirePermission('purchases.read'), asyncRoute(controller.getPurchase));
 router.post('/', requirePermission('purchases.create'), asyncRoute(controller.createPurchase));
 router.post('/:id/cancel', requirePermission('purchases.cancel'), asyncRoute(controller.cancelPurchase));

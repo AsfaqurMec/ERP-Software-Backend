@@ -1,6 +1,13 @@
 import type { Request, Response } from 'express';
 import { createPurchaseSchema, purchaseQuerySchema, purchaseReturnSchema } from './dto.js';
 import * as purchaseService from './service.js';
+import { scanAndExtractInvoice } from './invoice-scanner.service.js';
+
+export async function scanInvoice(req: Request, res: Response) {
+  const { imageBase64, mimeType, textContent } = req.body || {};
+  const result = await scanAndExtractInvoice({ imageBase64, mimeType, textContent });
+  res.json(result);
+}
 
 export async function listPurchases(req: Request, res: Response) {
   const query = purchaseQuerySchema.parse(req.query);
