@@ -140,10 +140,17 @@ export async function getMorningActionBriefing(): Promise<MorningBriefing> {
   // 4. Shrinkage & Loss Prevention Anomalies
   if (shrinkageData.anomalies.length > 0) {
     const topAnomaly = shrinkageData.anomalies[0];
+    const anomalySeverity: ActionCard['severity'] =
+      topAnomaly.severity === 'CRITICAL'
+        ? 'CRITICAL'
+        : topAnomaly.severity === 'WARNING'
+        ? 'HIGH'
+        : 'MEDIUM';
+
     actions.push({
       id: `ACT-SHRINK-${topAnomaly.productId.slice(-6)}`,
       category: 'SHRINKAGE',
-      severity: topAnomaly.severity,
+      severity: anomalySeverity,
       title: `Inventory Discrepancy Flag: "${topAnomaly.productName}"`,
       description: topAnomaly.explanation,
       impactMetric: `৳${topAnomaly.totalLossValue.toLocaleString()} Written Off`,
